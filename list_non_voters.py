@@ -16,6 +16,7 @@ from telegram_poll_cleanup import (
     fetch_voter_ids,
     friendly_rpc_error,
     load_config,
+    load_exclusions,
     load_poll_context,
     participant_to_record,
     print_candidate_table,
@@ -26,6 +27,7 @@ from telegram_poll_cleanup import (
 )
 
 BASE_DIR = Path(__file__).resolve().parent
+DEFAULT_EXCLUSIONS_PATH = BASE_DIR / "exclusions.txt"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -51,6 +53,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("non_voters.json"),
         help="Файл результата (по умолчанию: non_voters.json)",
     )
+    parser.add_argument(
+        "--exclusions",
+        type=Path,
+        default=DEFAULT_EXCLUSIONS_PATH,
+        help="Файл защищённых username/ID (по умолчанию: exclusions.txt в проекте)",
+    )
     return parser
 
 
@@ -60,6 +68,7 @@ async def run(args: argparse.Namespace) -> int:
         chat=args.chat,
         message_id=args.message_id,
     )
+    exclusions = load_exclusions(args.exclusions)
     config = load_config(BASE_DIR)
     client = create_client(config)
 
@@ -86,6 +95,7 @@ async def run(args: argparse.Namespace) -> int:
             voter_ids=voter_ids,
             own_user_id=int(me.id),
             poll_published_at=context.message.date,
+            exclusions=exclusions,
         )
 
         document = build_export_document(
@@ -102,6 +112,7 @@ async def run(args: argparse.Namespace) -> int:
         print(f"Кандидатов на удаление: {len(candidates)}")
         print(
             "Исключено: "
+            f"файлом исключений={reasons['excluded']}, "
             f"голосовали={reasons['voted']}, "
             f"владелец/администраторы={reasons['admin']}, "
             f"этот аккаунт={reasons['self']}, "

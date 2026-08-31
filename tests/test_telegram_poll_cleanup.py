@@ -4,6 +4,7 @@ import copy
 import json
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,10 +14,12 @@ from telethon import errors, functions, types
 
 from telegram_poll_cleanup import (
     CleanupError,
+    Exclusions,
     ParticipantRecord,
     PollLocation,
     fetch_all_participants,
     friendly_rpc_error,
+    load_exclusions,
     load_export_document,
     parse_poll_link,
     partition_exported_candidates,
@@ -207,6 +210,58 @@ class CandidateSelectionTests(unittest.TestCase):
                 "unknown_join_date": 1,
             },
         )
+
+    def test_select_candidates_applies_username_and_id_exclusions(self) -> None:
+        participants = [make_participant(1), make_participant(7), make_participant(8)]
+        participants[0] = replace(participants[0], username="Protected_User")
+        exclusions = Exclusions(
+            usernames=frozenset({"protected_user"}),
+            user_ids=frozenset({7}),
+        )
+
+        selected, reasons = select_candidates(
+            participants,
+            voter_ids=set(),
+            own_user_id=900,
+            poll_published_at=POLL_PUBLISHED_AT,
+            exclusions=exclusions,
+        )
+
+        self.assertEqual([record.id for record in selected], [8])
+        self.assertEqual(reasons["excluded"], 2)
+
+
+class ExclusionsFileTests(unittest.TestCase):
+    def test_load_exclusions_normalizes_usernames_ids_comments_and_duplicates(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "exclusions.txt"
+            path.write_text(
+                "# protected\n@Alice_User\nalice_user\n123456\n\n",
+                encoding="utf-8",
+            )
+
+            exclusions = load_exclusions(path)
+
+        self.assertEqual(exclusions.usernames, frozenset({"alice_user"}))
+        self.assertEqual(exclusions.user_ids, frozenset({123456}))
+
+    def test_load_exclusions_allows_a_missing_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "missing.txt"
+            exclusions = load_exclusions(path)
+
+        self.assertEqual(exclusions.usernames, frozenset())
+        self.assertEqual(exclusions.user_ids, frozenset())
+
+    def test_load_exclusions_rejects_invalid_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "exclusions.txt"
+            path.write_text("@bad username\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(CleanupError, "строка 1"):
+                load_exclusions(path)
 
 
 class ParticipantList(list[object]):

@@ -74,6 +74,56 @@ class CandidateDecision:
     reason: str
 
 
+@dataclass(frozen=True)
+class Exclusions:
+    usernames: frozenset[str]
+    user_ids: frozenset[int]
+
+    def matches(self, participant: ParticipantRecord) -> bool:
+        if participant.id in self.user_ids:
+            return True
+        username = participant.username
+        return username is not None and username.casefold() in self.usernames
+
+
+EMPTY_EXCLUSIONS = Exclusions(usernames=frozenset(), user_ids=frozenset())
+
+
+def load_exclusions(path: Path) -> Exclusions:
+    path = path.expanduser()
+    if not path.exists():
+        return EMPTY_EXCLUSIONS
+
+    usernames: set[str] = set()
+    user_ids: set[int] = set()
+    try:
+        with path.open(encoding="utf-8") as stream:
+            for line_number, raw_line in enumerate(stream, start=1):
+                value = raw_line.strip()
+                if not value or value.startswith("#"):
+                    continue
+                if value.isdecimal():
+                    user_id = int(value)
+                    if user_id <= 0:
+                        raise CleanupError(
+                            f"Некорректный ID в {path}, строка {line_number}."
+                        )
+                    user_ids.add(user_id)
+                    continue
+
+                username = value.removeprefix("@")
+                if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{3,31}", username):
+                    raise CleanupError(
+                        f"Некорректный username в {path}, строка {line_number}: "
+                        f"{value}"
+                    )
+                usernames.add(username.casefold())
+    except OSError as error:
+        raise CleanupError(f"Не удалось прочитать файл исключений {path}: {error}") from error
+
+    return Exclusions(usernames=frozenset(usernames), user_ids=frozenset(user_ids))
+
+
 def load_config(base_dir: Path) -> AppConfig:
     load_dotenv(base_dir / ".env", override=False)
 
@@ -379,7 +429,10 @@ def eligibility_reason(
     voter_ids: set[int],
     own_user_id: int,
     poll_published_at: datetime,
+    exclusions: Exclusions = EMPTY_EXCLUSIONS,
 ) -> str:
+    if exclusions.matches(participant):
+        return "excluded"
     if participant.id == own_user_id:
         return "self"
     if participant.is_admin:
@@ -399,6 +452,7 @@ def select_candidates(
     voter_ids: set[int],
     own_user_id: int,
     poll_published_at: datetime,
+    exclusions: Exclusions = EMPTY_EXCLUSIONS,
 ) -> tuple[list[ParticipantRecord], Counter[str]]:
     candidates: list[ParticipantRecord] = []
     reasons: Counter[str] = Counter()
@@ -408,6 +462,7 @@ def select_candidates(
             voter_ids=voter_ids,
             own_user_id=own_user_id,
             poll_published_at=poll_published_at,
+            exclusions=exclusions,
         )
         reasons[reason] += 1
         if reason == "eligible":
@@ -610,6 +665,7 @@ def partition_exported_candidates(
     voter_ids: set[int],
     own_user_id: int,
     poll_published_at: datetime,
+    exclusions: Exclusions = EMPTY_EXCLUSIONS,
 ) -> tuple[list[int], list[CandidateDecision]]:
     ready_ids: list[int] = []
     decisions: list[CandidateDecision] = []
@@ -631,6 +687,7 @@ def partition_exported_candidates(
             voter_ids=voter_ids,
             own_user_id=own_user_id,
             poll_published_at=poll_published_at,
+            exclusions=exclusions,
         )
         if reason == "eligible":
             ready_ids.append(user_id)

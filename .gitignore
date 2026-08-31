@@ -12,3 +12,4 @@ htmlcov/
 *.session*
 non_voters*.json
 removal_results*.jsonl
+exclusions.txt

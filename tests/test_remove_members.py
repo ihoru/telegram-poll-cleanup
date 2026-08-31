@@ -23,7 +23,7 @@ from remove_members import (
     non_negative_float,
     run,
 )
-from telegram_poll_cleanup import CleanupError
+from telegram_poll_cleanup import CleanupError, Exclusions
 
 POLL_PUBLISHED_AT = datetime(2026, 8, 1, 12, 0, tzinfo=timezone.utc)
 
@@ -311,6 +311,30 @@ class LiveEligibilityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reason, "joined_after_poll")
         self.assertLess(user.participant.date, POLL_PUBLISHED_AT)
 
+    async def test_new_username_exclusion_protects_live_member(self) -> None:
+        user = types.User(id=7, first_name="Ada", username="Protected_User")
+        live_participant = types.ChannelParticipant(
+            user_id=7,
+            date=POLL_PUBLISHED_AT - timedelta(days=1),
+        )
+        permissions = ParticipantPermissions(live_participant, chat=False)
+        client = SimpleNamespace(get_permissions=AsyncMock(return_value=permissions))
+
+        reason = await live_eligibility_reason(
+            client,
+            channel(),
+            user,
+            voter_ids=set(),
+            own_user_id=900,
+            poll_published_at=POLL_PUBLISHED_AT,
+            exclusions=Exclusions(
+                usernames=frozenset({"protected_user"}),
+                user_ids=frozenset(),
+            ),
+        )
+
+        self.assertEqual(reason, "excluded")
+
 
 class ServerClockTests(unittest.IsolatedAsyncioTestCase):
     async def test_server_clock_uses_telegram_time_and_suspend_aware_elapsed(
@@ -434,6 +458,7 @@ class DryRunTests(unittest.IsolatedAsyncioTestCase):
         }
         args = argparse.Namespace(
             input=Path("unused.json"),
+            exclusions=Path("unused-exclusions.txt"),
             execute=False,
             batch_size=10,
             min_delay=15.0,
@@ -519,6 +544,7 @@ class DryRunTests(unittest.IsolatedAsyncioTestCase):
         }
         args = argparse.Namespace(
             input=Path("unused.json"),
+            exclusions=Path("unused-exclusions.txt"),
             execute=True,
             batch_size=10,
             min_delay=15.0,

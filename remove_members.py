@@ -17,8 +17,10 @@ from typing import Any
 from telethon import errors, functions, types, utils
 
 from telegram_poll_cleanup import (
+    EMPTY_EXCLUSIONS,
     CandidateDecision,
     CleanupError,
+    Exclusions,
     append_private_jsonl,
     create_client,
     eligibility_reason,
@@ -26,6 +28,7 @@ from telegram_poll_cleanup import (
     fetch_voter_ids,
     friendly_rpc_error,
     load_config,
+    load_exclusions,
     load_export_document,
     load_poll_context,
     participant_to_record,
@@ -37,6 +40,7 @@ from telegram_poll_cleanup import (
 )
 
 BASE_DIR = Path(__file__).resolve().parent
+DEFAULT_EXCLUSIONS_PATH = BASE_DIR / "exclusions.txt"
 TEMPORARY_BAN_DURATION = timedelta(minutes=10)
 SAFE_RETRY_MARGIN = timedelta(minutes=1)
 MAX_SERVER_TIME_ROUND_TRIP = timedelta(seconds=30)
@@ -138,6 +142,12 @@ def build_parser() -> argparse.ArgumentParser:
         )
     )
     parser.add_argument("--input", type=Path, required=True, help="JSON из list_non_voters.py")
+    parser.add_argument(
+        "--exclusions",
+        type=Path,
+        default=DEFAULT_EXCLUSIONS_PATH,
+        help="Файл защищённых username/ID (по умолчанию: exclusions.txt в проекте)",
+    )
     parser.add_argument(
         "--execute",
         action="store_true",
@@ -306,6 +316,7 @@ async def live_eligibility_reason(
     voter_ids: set[int],
     own_user_id: int,
     poll_published_at: datetime,
+    exclusions: Exclusions = EMPTY_EXCLUSIONS,
 ) -> str:
     permissions = await client.get_permissions(chat, user)
     live_participant = permissions.participant
@@ -325,6 +336,7 @@ async def live_eligibility_reason(
         voter_ids=voter_ids,
         own_user_id=own_user_id,
         poll_published_at=poll_published_at,
+        exclusions=exclusions,
     )
 
 
@@ -345,6 +357,7 @@ async def run(args: argparse.Namespace) -> int:
         raise CleanupError("--max-delay не может быть меньше --min-delay.")
 
     document = load_export_document(args.input)
+    exclusions = load_exclusions(args.exclusions)
     config = load_config(BASE_DIR)
     client = create_client(config)
 
@@ -435,6 +448,7 @@ async def run(args: argparse.Namespace) -> int:
             voter_ids=voter_ids,
             own_user_id=int(me.id),
             poll_published_at=context.message.date,
+            exclusions=exclusions,
         )
 
         candidate_by_id = {
@@ -485,6 +499,7 @@ async def run(args: argparse.Namespace) -> int:
                     voter_ids=voter_ids,
                     own_user_id=int(me.id),
                     poll_published_at=context.message.date,
+                    exclusions=exclusions,
                 )
             except errors.UserNotParticipantError:
                 fresh_reason = "not_a_current_participant"
