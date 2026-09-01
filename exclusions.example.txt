@@ -1,4 +1,4 @@
-# Один Telegram username или числовой user ID на строку.
-# Строки с # и пустые строки игнорируются.
+# One Telegram username or numeric user ID per line.
+# Lines beginning with # and empty lines are ignored.
 @example_username
 123456789

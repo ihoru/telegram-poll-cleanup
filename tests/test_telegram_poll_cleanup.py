@@ -260,7 +260,7 @@ class ExclusionsFileTests(unittest.TestCase):
             path = Path(temporary_directory) / "exclusions.txt"
             path.write_text("@bad username\n", encoding="utf-8")
 
-            with self.assertRaisesRegex(CleanupError, "строка 1"):
+            with self.assertRaisesRegex(CleanupError, "line 1"):
                 load_exclusions(path)
 
 
@@ -374,7 +374,7 @@ class ParticipantLoadingTests(unittest.IsolatedAsyncioTestCase):
             reported_total=2,
         )
 
-        with self.assertRaisesRegex(CleanupError, "Состав группы изменился"):
+        with self.assertRaisesRegex(CleanupError, "Group membership changed"):
             await fetch_all_participants(client, chat)
 
     async def test_fetch_all_participants_rejects_an_incomplete_result(self) -> None:
@@ -386,7 +386,7 @@ class ParticipantLoadingTests(unittest.IsolatedAsyncioTestCase):
             reported_total=3,
         )
 
-        with self.assertRaisesRegex(CleanupError, "неполный список участников"):
+        with self.assertRaisesRegex(CleanupError, "Incomplete member list"):
             await fetch_all_participants(client, chat)
 
 
@@ -394,8 +394,8 @@ class RpcErrorTests(unittest.TestCase):
     def test_friendly_rpc_error_explains_poll_vote_requirement(self) -> None:
         message = friendly_rpc_error(errors.PollVoteRequiredError(request=None))
 
-        self.assertIn("должен был проголосовать", message)
-        self.assertIn("не голосует автоматически", message)
+        self.assertIn("had to vote", message)
+        self.assertIn("does not vote automatically", message)
 
 
 class ExportValidationTests(unittest.TestCase):
@@ -468,7 +468,7 @@ class ExportValidationTests(unittest.TestCase):
         document = valid_export_document()
         document["candidates"] = [candidate(1), candidate(1)]
 
-        with self.assertRaisesRegex(CleanupError, "Повторяющийся ID"):
+        with self.assertRaisesRegex(CleanupError, "Duplicate member ID"):
             self.load(document)
 
     def test_load_export_document_requires_the_supported_policy(self) -> None:

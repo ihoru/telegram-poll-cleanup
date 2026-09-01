@@ -365,7 +365,7 @@ class ServerClockTests(unittest.IsolatedAsyncioTestCase):
                 "remove_members.suspend_aware_seconds",
                 side_effect=[100.0, 131.0],
             ),
-            self.assertRaisesRegex(CleanupError, "больше 30 секунд"),
+            self.assertRaisesRegex(CleanupError, "more than 30 seconds"),
         ):
             await fetch_server_clock(client)
 
@@ -378,7 +378,7 @@ class ServerClockTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch("remove_members.suspend_aware_seconds", return_value=106.0),
-            self.assertRaisesRegex(CleanupError, "режим сна"),
+            self.assertRaisesRegex(CleanupError, "sleep state"),
         ):
             clock.now()
 
@@ -394,7 +394,7 @@ class ServerClockTests(unittest.IsolatedAsyncioTestCase):
             ensure_fresh_finite_ban_window(
                 clock, POLL_PUBLISHED_AT + timedelta(minutes=5)
             )
-            with self.assertRaisesRegex(CleanupError, "устарел"):
+            with self.assertRaisesRegex(CleanupError, "expired"):
                 ensure_fresh_finite_ban_window(
                     clock,
                     POLL_PUBLISHED_AT + timedelta(minutes=5) - timedelta(microseconds=1),

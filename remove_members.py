@@ -69,8 +69,8 @@ class ServerClock:
             or divergence > MAX_ELAPSED_CLOCK_DIVERGENCE.total_seconds()
         ):
             raise CleanupError(
-                "Системные часы или режим сна изменились после сверки времени. "
-                "Удаление отменено; повторите запуск."
+                "The system clock or sleep state changed after the time check. "
+                "Removal was cancelled; restart the command."
             )
         return self.server_time + timedelta(seconds=elapsed)
 
@@ -89,13 +89,13 @@ async def fetch_server_clock(client: Any) -> ServerClock:
     round_trip = elapsed_after - elapsed_before
     if round_trip > MAX_SERVER_TIME_ROUND_TRIP.total_seconds():
         raise CleanupError(
-            "Ответ Telegram для сверки времени занял больше 30 секунд. "
-            "Удаление отменено; повторите позже."
+            "Telegram took more than 30 seconds to respond to the time check. "
+            "Removal was cancelled; try again later."
         )
 
     server_time = getattr(config, "date", None)
     if not isinstance(server_time, datetime):
-        raise CleanupError("Telegram не вернул корректное серверное время.")
+        raise CleanupError("Telegram did not return a valid server time.")
     if server_time.tzinfo is None:
         server_time = server_time.replace(tzinfo=timezone.utc)
     else:
@@ -113,15 +113,15 @@ def ensure_fresh_finite_ban_window(
     remaining = temporary_ban_until - clock.now()
     if remaining < MINIMUM_FINITE_BAN_REMAINING:
         raise CleanupError(
-            "Срок временного бана устарел до отправки запроса. "
-            "Удаление отменено; повторите запуск."
+            "The temporary ban deadline expired before the request was sent. "
+            "Removal was cancelled; restart the command."
         )
 
 
 def positive_int(value: str) -> int:
     parsed = int(value)
     if parsed <= 0:
-        raise argparse.ArgumentTypeError("значение должно быть больше нуля")
+        raise argparse.ArgumentTypeError("value must be greater than zero")
     return parsed
 
 
@@ -129,7 +129,7 @@ def non_negative_float(value: str) -> float:
     parsed = float(value)
     if not math.isfinite(parsed) or parsed < 0:
         raise argparse.ArgumentTypeError(
-            "значение должно быть конечным неотрицательным числом"
+            "value must be a finite, non-negative number"
         )
     return parsed
 
@@ -137,45 +137,47 @@ def non_negative_float(value: str) -> float:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Повторно проверить JSON-список и удалить участников из Telegram-группы "
-            "без постоянного бана. Без --execute работает только проверка."
+            "Recheck a JSON candidate list and remove members from a Telegram "
+            "group without a permanent ban. Without --execute, only a dry run is performed."
         )
     )
-    parser.add_argument("--input", type=Path, required=True, help="JSON из list_non_voters.py")
+    parser.add_argument(
+        "--input", type=Path, required=True, help="JSON produced by list_non_voters.py"
+    )
     parser.add_argument(
         "--exclusions",
         type=Path,
         default=DEFAULT_EXCLUSIONS_PATH,
-        help="Файл защищённых username/ID (по умолчанию: exclusions.txt в проекте)",
+        help="Protected username/ID file (default: exclusions.txt in the project)",
     )
     parser.add_argument(
         "--execute",
         action="store_true",
-        help="Выполнить удаление после интерактивного подтверждения",
+        help="Perform removals after interactive confirmation",
     )
     parser.add_argument(
         "--batch-size",
         type=positive_int,
         default=10,
-        help="Максимум удалений за запуск (по умолчанию: 10)",
+        help="Maximum removals per run (default: 10)",
     )
     parser.add_argument(
         "--min-delay",
         type=non_negative_float,
         default=15.0,
-        help="Минимальная пауза между удалениями, секунды (по умолчанию: 15)",
+        help="Minimum delay between removals in seconds (default: 15)",
     )
     parser.add_argument(
         "--max-delay",
         type=non_negative_float,
         default=30.0,
-        help="Максимальная пауза между удалениями, секунды (по умолчанию: 30)",
+        help="Maximum delay between removals in seconds (default: 30)",
     )
     parser.add_argument(
         "--log",
         type=Path,
         default=Path("removal_results.jsonl"),
-        help="Журнал выполнения (по умолчанию: removal_results.jsonl)",
+        help="Execution log (default: removal_results.jsonl)",
     )
     return parser
 
@@ -191,7 +193,7 @@ def ensure_removal_permission(chat: Any, permissions: Any) -> None:
     ):
         return
     raise CleanupError(
-        "Аккаунт не является владельцем или администратором с правом удаления участников."
+        "The account is not the owner or an administrator with permission to remove members."
     )
 
 
@@ -256,11 +258,11 @@ def load_pending_kicks(
                     record = json.loads(line)
                 except json.JSONDecodeError as error:
                     raise CleanupError(
-                        f"Повреждён журнал {path}, строка {line_number}: {error}"
+                        f"Malformed log {path}, line {line_number}: {error}"
                     ) from error
                 if not isinstance(record, dict):
                     raise CleanupError(
-                        f"Некорректная запись журнала {path}, строка {line_number}."
+                        f"Invalid log entry in {path}, line {line_number}."
                     )
                 if (
                     record.get("chat_id") != document["chat"]["id"]
@@ -270,17 +272,17 @@ def load_pending_kicks(
                     continue
                 if record.get("account_id") != document["exported_by_user_id"]:
                     raise CleanupError(
-                        "Журнал этой группы/опроса создан другим аккаунтом."
+                        "The log for this group and poll was created by another account."
                     )
                 user = record.get("user")
                 user_id = user.get("id") if isinstance(user, dict) else None
                 if isinstance(user_id, bool) or not isinstance(user_id, int):
                     raise CleanupError(
-                        f"Некорректный user.id в журнале, строка {line_number}."
+                        f"Invalid user.id in the log, line {line_number}."
                     )
                 latest_by_user_id[user_id] = record
     except OSError as error:
-        raise CleanupError(f"Не удалось прочитать журнал {path}: {error}") from error
+        raise CleanupError(f"Could not read log {path}: {error}") from error
 
     current_time = now or datetime.now(timezone.utc)
     if current_time.tzinfo is None:
@@ -346,15 +348,15 @@ async def pause_before_next(
     if index + 1 >= total:
         return
     delay = random.uniform(min_delay, max_delay)
-    print(f"Пауза {delay:.1f} сек.")
+    print(f"Waiting {delay:.1f} seconds.")
     await asyncio.sleep(delay)
 
 
 async def run(args: argparse.Namespace) -> int:
     if args.batch_size > 1_000:
-        raise CleanupError("--batch-size не может быть больше 1000.")
+        raise CleanupError("--batch-size cannot exceed 1000.")
     if args.max_delay < args.min_delay:
-        raise CleanupError("--max-delay не может быть меньше --min-delay.")
+        raise CleanupError("--max-delay cannot be less than --min-delay.")
 
     document = load_export_document(args.input)
     exclusions = load_exclusions(args.exclusions)
@@ -362,13 +364,17 @@ async def run(args: argparse.Namespace) -> int:
     client = create_client(config)
 
     try:
-        await client.start()
+        await client.start(
+            phone=lambda: input(
+                "Please enter your phone number (bot tokens are not supported): "
+            )
+        )
         tighten_session_permissions(config.session_path)
         me = await client.get_me()
         if me is None:
-            raise CleanupError("Не удалось определить авторизованный аккаунт.")
+            raise CleanupError("Could not identify the authorized account.")
         if bool(getattr(me, "bot", False)):
-            raise CleanupError("Нужен пользовательский аккаунт, а не bot token.")
+            raise CleanupError("A user account is required; bot tokens are not supported.")
 
         chat_id = int(document["chat"]["id"])
         message_id = int(document["poll"]["message_id"])
@@ -400,7 +406,7 @@ async def run(args: argparse.Namespace) -> int:
         )
         if expired_kicks:
             print(
-                "Истёк защитный срок временного бана для незавершённых операций: "
+                "The temporary-ban safety period expired for pending operations: "
                 f"{len(expired_kicks)}."
             )
             if args.execute:
@@ -419,8 +425,8 @@ async def run(args: argparse.Namespace) -> int:
             print_candidate_table([record["user"] for record in pending_kicks])
             print()
             print(
-                "Предыдущий запуск завершился с неопределённым результатом: "
-                f"{len(pending_kicks)}. Новые удаления временно заблокированы."
+                "A previous run ended with an uncertain result for "
+                f"{len(pending_kicks)} operation(s). New removals are temporarily blocked."
             )
             deadlines = [
                 record.get("details", {}).get("safe_retry_after")
@@ -429,10 +435,10 @@ async def run(args: argparse.Namespace) -> int:
             ]
             deadlines = [value for value in deadlines if isinstance(value, str)]
             if deadlines:
-                print(f"Повторите dry-run после: {max(deadlines)}")
+                print(f"Repeat the dry run after: {max(deadlines)}")
             print(
-                "Скрипт не будет снимать бан отдельным запросом: конечный срок "
-                "ограничения истечёт на стороне Telegram автоматически."
+                "The script will not remove the ban with a separate request: "
+                "Telegram will automatically expire the restriction at its deadline."
             )
             return 0
 
@@ -461,28 +467,28 @@ async def run(args: argparse.Namespace) -> int:
 
         print_candidate_table(batch_candidates)
         print()
-        print(f"Группа: {getattr(context.chat, 'title', '')} ({chat_id})")
-        print(f"Кандидатов в исходном списке: {len(document['candidates'])}")
-        print(f"После повторной проверки доступны: {len(ready_ids)}")
-        print(f"За этот запуск будет обработано: {len(batch_ids)}")
-        print(f"Уже отсутствуют или защищены: {len(decisions)}")
+        print(f"Group: {getattr(context.chat, 'title', '')} ({chat_id})")
+        print(f"Candidates in the original list: {len(document['candidates'])}")
+        print(f"Eligible after recheck: {len(ready_ids)}")
+        print(f"To be processed in this run: {len(batch_ids)}")
+        print(f"Already absent or protected: {len(decisions)}")
 
         if not args.execute:
-            print("Dry-run завершён: Telegram-группа не изменена.")
-            print("Для удаления повторите команду с --execute.")
+            print("Dry run complete: the Telegram group was not changed.")
+            print("Run the command again with --execute to remove members.")
             return 0
         if not batch_ids:
-            print("После повторной проверки удалять некого.")
+            print("There are no eligible members to remove after the recheck.")
             return 0
         if not sys.stdin.isatty():
-            raise CleanupError("Для --execute требуется интерактивный терминал.")
+            raise CleanupError("--execute requires an interactive terminal.")
 
         expected_confirmation = f"REMOVE {len(batch_ids)}"
         confirmation = input(
-            f"Введите {expected_confirmation}, чтобы подтвердить удаление: "
+            f"Enter {expected_confirmation} to confirm removal: "
         ).strip()
         if confirmation != expected_confirmation:
-            raise CleanupError("Подтверждение не совпало. Удаление отменено.")
+            raise CleanupError("Confirmation did not match. Removal was cancelled.")
 
         for decision in decisions:
             append_decision_log(args.log, document, decision)
@@ -519,7 +525,7 @@ async def run(args: argparse.Namespace) -> int:
                         reason=f"live_revalidation:{fresh_reason}",
                     ),
                 )
-                print(f"Пропущен {user_id} после повторной проверки: {fresh_reason}.")
+                print(f"Skipped {user_id} after recheck: {fresh_reason}.")
                 await pause_before_next(
                     index=index,
                     total=len(batch_ids),
@@ -531,7 +537,7 @@ async def run(args: argparse.Namespace) -> int:
             operation_details: dict[str, Any] = {}
             if isinstance(context.chat, types.Channel):
                 if server_clock is None:
-                    raise CleanupError("Не удалось получить серверное время Telegram.")
+                    raise CleanupError("Could not retrieve Telegram server time.")
                 operation_clock = await fetch_server_clock(client)
                 temporary_ban_until = operation_clock.now() + TEMPORARY_BAN_DURATION
                 safe_retry_after = temporary_ban_until + SAFE_RETRY_MARGIN
@@ -636,20 +642,20 @@ async def run(args: argparse.Namespace) -> int:
                     raise
                 if reason == "account_lost_removal_permission":
                     raise CleanupError(
-                        "Аккаунт потерял право удаления участников; партия остановлена."
+                        "The account lost permission to remove members; the batch was stopped."
                     ) from error
                 if status == "already_absent":
-                    print(f"Пропущен {user_id}: уже не состоит в группе.")
+                    print(f"Skipped {user_id}: no longer a group member.")
                 elif status == "skipped_protected":
                     print(
-                        f"Пропущен {user_id}: Telegram считает его администратором."
+                        f"Skipped {user_id}: Telegram identifies this user as an administrator."
                     )
                 elif reason in {
                     "InputUserDeactivatedError",
                     "ParticipantIdInvalidError",
                     "UserIdInvalidError",
                 }:
-                    print(f"Не удалось удалить {user_id}: {reason}.")
+                    print(f"Could not remove {user_id}: {reason}.")
                 else:
                     raise
             else:
@@ -669,10 +675,10 @@ async def run(args: argparse.Namespace) -> int:
                         details=operation_details,
                     ),
                 )
-                message = f"Удалён {user_id} ({index + 1}/{len(batch_ids)})."
+                message = f"Removed {user_id} ({index + 1}/{len(batch_ids)})."
                 if is_supergroup:
                     message += (
-                        " Повторный вход будет возможен после "
+                        " The user will be able to rejoin after "
                         f"{operation_details['temporary_ban_until']}."
                     )
                 print(message)
@@ -684,12 +690,12 @@ async def run(args: argparse.Namespace) -> int:
                 max_delay=args.max_delay,
             )
 
-        print(f"Удалено за этот запуск: {removed_count}")
-        print(f"Журнал: {args.log.expanduser().resolve()}")
+        print(f"Removed in this run: {removed_count}")
+        print(f"Log: {args.log.expanduser().resolve()}")
         if len(ready_ids) > len(batch_ids):
             print(
-                f"Осталось кандидатов: {len(ready_ids) - len(batch_ids)}. "
-                "Запустите dry-run повторно перед следующей партией."
+                f"Remaining candidates: {len(ready_ids) - len(batch_ids)}. "
+                "Run another dry run before the next batch."
             )
         return 0
     finally:
@@ -703,35 +709,35 @@ def main() -> int:
     try:
         return asyncio.run(run(args))
     except CleanupError as error:
-        print(f"Ошибка: {error}", file=sys.stderr)
+        print(f"Error: {error}", file=sys.stderr)
         return 2
     except errors.FloodWaitError as error:
         print(
-            "Telegram потребовал паузу. Выполнение остановлено; не повторяйте действия "
-            f"минимум {error.seconds} секунд.",
+            "Telegram requested a delay. Execution stopped; do not retry for at least "
+            f"{error.seconds} seconds.",
             file=sys.stderr,
         )
         return 3
     except errors.PeerFloodError:
         print(
-            "Telegram ограничил аккаунт (PeerFlood). Выполнение остановлено; "
-            "не обходите ограничение и проверьте @SpamBot.",
+            "Telegram restricted the account (PeerFlood). Execution stopped; "
+            "do not bypass the restriction, and check @SpamBot.",
             file=sys.stderr,
         )
         return 3
     except errors.RPCError as error:
-        print(f"Ошибка: {friendly_rpc_error(error)}", file=sys.stderr)
+        print(f"Error: {friendly_rpc_error(error)}", file=sys.stderr)
         return 2
     except OSError as error:
         print(
-            "Системная или сетевая ошибка: "
-            f"{error}. Перед повтором обязательно выполните dry-run; журнал может "
-            "содержать незавершённую операцию.",
+            "System or network error: "
+            f"{error}. Before retrying, always run a dry run; the log may contain "
+            "a pending operation.",
             file=sys.stderr,
         )
         return 2
     except KeyboardInterrupt:
-        print("Операция отменена.", file=sys.stderr)
+        print("Operation cancelled.", file=sys.stderr)
         return 130
 
 

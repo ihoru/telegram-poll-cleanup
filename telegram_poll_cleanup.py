@@ -106,7 +106,7 @@ def load_exclusions(path: Path) -> Exclusions:
                     user_id = int(value)
                     if user_id <= 0:
                         raise CleanupError(
-                            f"Некорректный ID в {path}, строка {line_number}."
+                            f"Invalid ID in {path}, line {line_number}."
                         )
                     user_ids.add(user_id)
                     continue
@@ -114,12 +114,12 @@ def load_exclusions(path: Path) -> Exclusions:
                 username = value.removeprefix("@")
                 if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{3,31}", username):
                     raise CleanupError(
-                        f"Некорректный username в {path}, строка {line_number}: "
+                        f"Invalid username in {path}, line {line_number}: "
                         f"{value}"
                     )
                 usernames.add(username.casefold())
     except OSError as error:
-        raise CleanupError(f"Не удалось прочитать файл исключений {path}: {error}") from error
+        raise CleanupError(f"Could not read exclusions file {path}: {error}") from error
 
     return Exclusions(usernames=frozenset(usernames), user_ids=frozenset(user_ids))
 
@@ -133,15 +133,15 @@ def load_config(base_dir: Path) -> AppConfig:
 
     if not raw_api_id or not api_hash:
         raise CleanupError(
-            "Заполните TELEGRAM_API_ID и TELEGRAM_API_HASH в файле .env."
+            "Set TELEGRAM_API_ID and TELEGRAM_API_HASH in the .env file."
         )
 
     try:
         api_id = int(raw_api_id)
     except ValueError as exc:
-        raise CleanupError("TELEGRAM_API_ID должен быть целым числом.") from exc
+        raise CleanupError("TELEGRAM_API_ID must be an integer.") from exc
     if api_id <= 0:
-        raise CleanupError("TELEGRAM_API_ID должен быть положительным числом.")
+        raise CleanupError("TELEGRAM_API_ID must be a positive integer.")
 
     session_value = raw_session or DEFAULT_SESSION_NAME
     session_path = Path(session_value).expanduser()
@@ -187,29 +187,29 @@ def parse_poll_link(link: str) -> PollLocation:
         "telegram.me",
         "www.telegram.me",
     }:
-        raise CleanupError("Ожидалась ссылка вида https://t.me/... на сообщение с опросом.")
+        raise CleanupError("Expected a poll message link in the form https://t.me/....")
 
     parts = [unquote(part) for part in parsed.path.split("/") if part]
     if parts and parts[0] == "s":
         parts = parts[1:]
     if len(parts) < 2:
-        raise CleanupError("В ссылке не найден идентификатор сообщения.")
+        raise CleanupError("The link does not contain a message ID.")
 
     try:
         message_id = int(parts[-1])
     except ValueError as exc:
-        raise CleanupError("Последняя часть ссылки должна быть ID сообщения.") from exc
+        raise CleanupError("The final part of the link must be a message ID.") from exc
     if message_id <= 0:
-        raise CleanupError("ID сообщения должен быть положительным числом.")
+        raise CleanupError("The message ID must be a positive integer.")
 
     if parts[0] == "c":
         if len(parts) < 3 or not parts[1].isdigit():
-            raise CleanupError("Некорректная ссылка на сообщение приватной группы.")
+            raise CleanupError("Invalid private group message link.")
         chat_ref: int | str = int(f"-100{parts[1]}")
     else:
         username = parts[0].lstrip("@")
         if not re.fullmatch(r"[A-Za-z0-9_]{4,}", username):
-            raise CleanupError("В ссылке не найден корректный username группы.")
+            raise CleanupError("The link does not contain a valid group username.")
         chat_ref = f"@{username}"
 
     return PollLocation(chat_ref=chat_ref, message_id=message_id)
@@ -221,16 +221,16 @@ def resolve_poll_location(
     if poll_link:
         if chat is not None or message_id is not None:
             raise CleanupError(
-                "Используйте либо --poll-link, либо пару --chat и --message-id."
+                "Use either --poll-link or the --chat and --message-id pair."
             )
         return parse_poll_link(poll_link)
 
     if chat is None or message_id is None:
         raise CleanupError(
-            "Укажите --poll-link либо одновременно --chat и --message-id."
+            "Provide --poll-link or both --chat and --message-id."
         )
     if message_id <= 0:
-        raise CleanupError("--message-id должен быть положительным числом.")
+        raise CleanupError("--message-id must be a positive integer.")
 
     normalized_chat: int | str
     try:
@@ -249,14 +249,15 @@ async def resolve_chat(client: TelegramClient, chat_ref: int | str) -> Any:
                 if utils.get_peer_id(dialog.entity) == chat_ref:
                     return dialog.entity
         raise CleanupError(
-            "Не удалось найти группу. Убедитесь, что аккаунт состоит в ней и ссылка/ID верны."
+            "Could not find the group. Make sure the account is a member and "
+            "the link or ID is correct."
         ) from original_error
 
 
 def ensure_supported_group(chat: Any) -> None:
     if isinstance(chat, types.Chat):
         if getattr(chat, "deactivated", False):
-            raise CleanupError("Группа деактивирована.")
+            raise CleanupError("The group has been deactivated.")
         return
     if (
         isinstance(chat, types.Channel)
@@ -265,7 +266,7 @@ def ensure_supported_group(chat: Any) -> None:
     ):
         return
     raise CleanupError(
-        "Поддерживаются только обычные группы и супергруппы, но не каналы."
+        "Only basic groups and supergroups are supported; channels are not."
     )
 
 
@@ -281,18 +282,18 @@ async def load_poll_context(
 
     message = await client.get_messages(chat, ids=message_id)
     if message is None:
-        raise CleanupError("Сообщение с указанным ID не найдено.")
+        raise CleanupError("No message was found with the specified ID.")
     if not isinstance(getattr(message, "media", None), types.MessageMediaPoll):
-        raise CleanupError("Указанное сообщение не содержит опрос.")
+        raise CleanupError("The specified message does not contain a poll.")
 
     poll = message.media.poll
     if not bool(getattr(poll, "public_voters", False)):
         raise CleanupError(
-            "Опрос анонимный: Telegram не позволяет получить личности голосовавших."
+            "The poll is anonymous, so Telegram does not expose voter identities."
         )
     if require_closed and not bool(getattr(poll, "closed", False)):
         raise CleanupError(
-            "Опрос ещё открыт. Закройте его перед формированием списка."
+            "The poll is still open. Close it before generating the list."
         )
 
     return PollContext(chat=chat, message=message)
@@ -319,13 +320,13 @@ async def fetch_voter_ids(
         if expected_count is None:
             expected_count = page_count
         elif page_count != expected_count:
-            raise CleanupError("Количество голосов изменилось во время выгрузки.")
+            raise CleanupError("The vote count changed during export.")
         for vote in result.votes:
             peer = getattr(vote, "peer", None)
             if not isinstance(peer, types.PeerUser):
                 raise CleanupError(
-                    "Найден голос от имени канала или другого чата. "
-                    "Его нельзя безопасно связать с конкретным участником."
+                    "A vote submitted as a channel or another chat was found. "
+                    "It cannot be safely associated with a specific member."
                 )
             voter_ids.add(int(peer.user_id))
 
@@ -333,13 +334,13 @@ async def fetch_voter_ids(
         if not next_offset:
             break
         if next_offset in seen_offsets:
-            raise CleanupError("Telegram вернул повторяющийся offset голосов.")
+            raise CleanupError("Telegram returned a repeated vote offset.")
         seen_offsets.add(next_offset)
         offset = next_offset
 
     if expected_count is not None and len(voter_ids) != expected_count:
         raise CleanupError(
-            f"Получен неполный список голосов: {len(voter_ids)} из {expected_count}."
+            f"Incomplete voter list: received {len(voter_ids)} of {expected_count}."
         )
     return voter_ids
 
@@ -351,14 +352,14 @@ async def fetch_all_participants(client: TelegramClient, chat: Any) -> list[Any]
     total = getattr(result, "total", None)
     if count_before != count_after:
         raise CleanupError(
-            "Состав группы изменился во время выгрузки. Повторите попытку позже."
+            "Group membership changed during export. Try again later."
         )
     if len(result) != count_after or (
         total is not None and int(total) != count_after
     ):
         raise CleanupError(
-            f"Получен неполный список участников: {len(result)} из {count_after}. "
-            "Удаление по неполной выборке запрещено."
+            f"Incomplete member list: received {len(result)} of {count_after}. "
+            "Removal based on incomplete data is not allowed."
         )
     return list(result)
 
@@ -369,7 +370,7 @@ async def fetch_current_participant_count(client: TelegramClient, chat: Any) -> 
         count = getattr(result.full_chat, "participants_count", None)
         if count is None:
             raise CleanupError(
-                "Telegram не предоставил общее количество участников супергруппы."
+                "Telegram did not provide the total supergroup member count."
             )
         return int(count)
 
@@ -378,13 +379,13 @@ async def fetch_current_participant_count(client: TelegramClient, chat: Any) -> 
         participants = getattr(result.full_chat, "participants", None)
         if isinstance(participants, types.ChatParticipantsForbidden):
             raise CleanupError(
-                "Telegram скрыл состав обычной группы; безопасная выгрузка невозможна."
+                "Telegram hid the basic group member list; a safe export is impossible."
             )
         if not isinstance(participants, types.ChatParticipants):
-            raise CleanupError("Telegram вернул неизвестный формат состава группы.")
+            raise CleanupError("Telegram returned an unknown group membership format.")
         return len(participants.participants)
 
-    raise CleanupError("Не удалось определить количество участников группы.")
+    raise CleanupError("Could not determine the group member count.")
 
 
 _ADMIN_PARTICIPANT_TYPES = (
@@ -542,21 +543,21 @@ def write_private_json(path: Path, document: Mapping[str, Any]) -> None:
 
 def _required_mapping(value: Any, name: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
-        raise CleanupError(f"Поле {name} должно быть JSON-объектом.")
+        raise CleanupError(f"The {name} field must be a JSON object.")
     return value
 
 
 def _required_int(value: Any, name: str, *, positive: bool = False) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
-        raise CleanupError(f"Поле {name} должно быть целым числом.")
+        raise CleanupError(f"The {name} field must be an integer.")
     if positive and value <= 0:
-        raise CleanupError(f"Поле {name} должно быть положительным числом.")
+        raise CleanupError(f"The {name} field must be a positive integer.")
     return value
 
 
 def _optional_string(value: Any, name: str) -> str | None:
     if value is not None and not isinstance(value, str):
-        raise CleanupError(f"Поле {name} должно быть строкой или null.")
+        raise CleanupError(f"The {name} field must be a string or null.")
     return value
 
 
@@ -565,27 +566,27 @@ def load_export_document(path: Path) -> dict[str, Any]:
         with path.expanduser().open(encoding="utf-8") as stream:
             document = json.load(stream)
     except FileNotFoundError as exc:
-        raise CleanupError(f"Файл списка не найден: {path}") from exc
+        raise CleanupError(f"Candidate list file not found: {path}") from exc
     except (OSError, json.JSONDecodeError) as exc:
-        raise CleanupError(f"Не удалось прочитать JSON-список: {exc}") from exc
+        raise CleanupError(f"Could not read the JSON candidate list: {exc}") from exc
 
-    root = _required_mapping(document, "корень")
+    root = _required_mapping(document, "document root")
     if root.get("schema_version") != SCHEMA_VERSION:
         raise CleanupError(
-            f"Поддерживается только schema_version={SCHEMA_VERSION}."
+            f"Only schema_version={SCHEMA_VERSION} is supported."
         )
 
     _required_int(root.get("exported_by_user_id"), "exported_by_user_id", positive=True)
     chat = _required_mapping(root.get("chat"), "chat")
     _required_int(chat.get("id"), "chat.id")
     if not isinstance(chat.get("title"), str):
-        raise CleanupError("Поле chat.title должно быть строкой.")
+        raise CleanupError("The chat.title field must be a string.")
 
     poll = _required_mapping(root.get("poll"), "poll")
     _required_int(poll.get("message_id"), "poll.message_id", positive=True)
     _required_int(poll.get("poll_id"), "poll.poll_id", positive=True)
     if poll.get("closed") is not True or poll.get("public_voters") is not True:
-        raise CleanupError("Список должен относиться к закрытому неанонимному опросу.")
+        raise CleanupError("The list must refer to a closed, non-anonymous poll.")
 
     policy = _required_mapping(root.get("policy"), "policy")
     expected_policy = {
@@ -597,13 +598,13 @@ def load_export_document(path: Path) -> dict[str, Any]:
         "include_deleted_accounts": True,
     }
     if any(policy.get(key) is not value for key, value in expected_policy.items()):
-        raise CleanupError("Политика кандидатов в файле отличается от поддерживаемой.")
+        raise CleanupError("The candidate policy in the file is not supported.")
 
     raw_candidates = root.get("candidates")
     if not isinstance(raw_candidates, list):
-        raise CleanupError("Поле candidates должно быть списком.")
+        raise CleanupError("The candidates field must be a list.")
     if len(raw_candidates) > MAX_CANDIDATES:
-        raise CleanupError(f"В списке больше {MAX_CANDIDATES} записей.")
+        raise CleanupError(f"The list contains more than {MAX_CANDIDATES} entries.")
 
     normalized_candidates: list[dict[str, int | str | None]] = []
     seen_ids: set[int] = set()
@@ -613,7 +614,7 @@ def load_export_document(path: Path) -> dict[str, Any]:
             candidate.get("id"), f"candidates[{index}].id", positive=True
         )
         if user_id in seen_ids:
-            raise CleanupError(f"Повторяющийся ID участника: {user_id}")
+            raise CleanupError(f"Duplicate member ID: {user_id}")
         seen_ids.add(user_id)
         normalized_candidates.append(
             {
@@ -648,14 +649,14 @@ def validate_export_context(
 ) -> None:
     if int(document["exported_by_user_id"]) != own_user_id:
         raise CleanupError(
-            "Список создан другим Telegram-аккаунтом. Используйте исходную session."
+            "The list was created by another Telegram account. Use the original session."
         )
     if int(document["chat"]["id"]) != chat_id:
-        raise CleanupError("Текущая группа не совпадает с группой в списке.")
+        raise CleanupError("The current group does not match the group in the list.")
     if int(document["poll"]["message_id"]) != message_id:
-        raise CleanupError("ID сообщения не совпадает с данными списка.")
+        raise CleanupError("The message ID does not match the list metadata.")
     if int(document["poll"]["poll_id"]) != poll_id:
-        raise CleanupError("Опрос в сообщении изменился и не совпадает со списком.")
+        raise CleanupError("The poll in the message changed and no longer matches the list.")
 
 
 def partition_exported_candidates(
@@ -757,19 +758,19 @@ def friendly_rpc_error(error: errors.RPCError) -> str:
     error_name = type(error).__name__
     messages = {
         "PollVoteRequiredError": (
-            "Telegram не разрешил получить голоса: этот аккаунт должен был "
-            "проголосовать в опросе. Скрипт не голосует автоматически."
+            "Telegram did not allow voter retrieval: this account had to vote "
+            "in the poll. The script does not vote automatically."
         ),
         "BroadcastForbiddenError": (
-            "Telegram запрещает получать голоса для опроса в broadcast-канале."
+            "Telegram does not allow voter retrieval for a poll in a broadcast channel."
         ),
-        "MessageIdInvalidError": "Telegram не нашёл сообщение с таким ID.",
+        "MessageIdInvalidError": "Telegram did not find a message with that ID.",
         "ChatAdminRequiredError": (
-            "Для этого действия аккаунту не хватает прав администратора."
+            "The account does not have the administrator rights required for this action."
         ),
         "ChannelPrivateError": (
-            "Группа недоступна аккаунту или аккаунт больше не состоит в ней."
+            "The group is unavailable to the account, or the account is no longer a member."
         ),
-        "ChatWriteForbiddenError": "Аккаунту запрещены административные действия в группе.",
+        "ChatWriteForbiddenError": "The account cannot perform administrative actions in the group.",
     }
-    return messages.get(error_name, f"Ошибка Telegram {error_name}: {error}")
+    return messages.get(error_name, f"Telegram error {error_name}: {error}")

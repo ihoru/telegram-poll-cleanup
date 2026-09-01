@@ -33,31 +33,31 @@ DEFAULT_EXCLUSIONS_PATH = BASE_DIR / "exclusions.txt"
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Сформировать список текущих участников закрытого неанонимного "
-            "Telegram-опроса, которые не проголосовали."
+            "Generate a list of current group members who did not vote in a "
+            "closed, non-anonymous Telegram poll."
         )
     )
-    parser.add_argument("--poll-link", help="Ссылка t.me на сообщение с опросом")
+    parser.add_argument("--poll-link", help="t.me link to the poll message")
     parser.add_argument(
         "--chat",
-        help="Username группы (@group) или числовой ID; используйте с --message-id",
+        help="Group username (@group) or numeric ID; use with --message-id",
     )
     parser.add_argument(
         "--message-id",
         type=int,
-        help="ID сообщения с опросом; используйте с --chat",
+        help="Poll message ID; use with --chat",
     )
     parser.add_argument(
         "--output",
         type=Path,
         default=Path("non_voters.json"),
-        help="Файл результата (по умолчанию: non_voters.json)",
+        help="Output file (default: non_voters.json)",
     )
     parser.add_argument(
         "--exclusions",
         type=Path,
         default=DEFAULT_EXCLUSIONS_PATH,
-        help="Файл защищённых username/ID (по умолчанию: exclusions.txt в проекте)",
+        help="Protected username/ID file (default: exclusions.txt in the project)",
     )
     return parser
 
@@ -73,13 +73,17 @@ async def run(args: argparse.Namespace) -> int:
     client = create_client(config)
 
     try:
-        await client.start()
+        await client.start(
+            phone=lambda: input(
+                "Please enter your phone number (bot tokens are not supported): "
+            )
+        )
         tighten_session_permissions(config.session_path)
         me = await client.get_me()
         if me is None:
-            raise CleanupError("Не удалось определить авторизованный аккаунт.")
+            raise CleanupError("Could not identify the authorized account.")
         if bool(getattr(me, "bot", False)):
-            raise CleanupError("Нужен пользовательский аккаунт, а не bot token.")
+            raise CleanupError("A user account is required; bot tokens are not supported.")
 
         context = await load_poll_context(
             client,
@@ -107,19 +111,19 @@ async def run(args: argparse.Namespace) -> int:
 
         print_candidate_table(document["candidates"])
         print()
-        print(f"Текущих участников получено: {len(participants)}")
-        print(f"Уникальных голосовавших найдено: {len(voter_ids)}")
-        print(f"Кандидатов на удаление: {len(candidates)}")
+        print(f"Current members retrieved: {len(participants)}")
+        print(f"Unique voters found: {len(voter_ids)}")
+        print(f"Removal candidates: {len(candidates)}")
         print(
-            "Исключено: "
-            f"файлом исключений={reasons['excluded']}, "
-            f"голосовали={reasons['voted']}, "
-            f"владелец/администраторы={reasons['admin']}, "
-            f"этот аккаунт={reasons['self']}, "
-            f"вступили позже={reasons['joined_after_poll']}, "
-            f"неизвестна дата вступления={reasons['unknown_join_date']}"
+            "Excluded: "
+            f"exclusions file={reasons['excluded']}, "
+            f"voted={reasons['voted']}, "
+            f"owner/administrators={reasons['admin']}, "
+            f"current account={reasons['self']}, "
+            f"joined later={reasons['joined_after_poll']}, "
+            f"unknown join date={reasons['unknown_join_date']}"
         )
-        print(f"Список сохранён: {args.output.expanduser().resolve()}")
+        print(f"List saved to: {args.output.expanduser().resolve()}")
         return 0
     finally:
         await client.disconnect()
@@ -132,29 +136,29 @@ def main() -> int:
     try:
         return asyncio.run(run(args))
     except CleanupError as error:
-        print(f"Ошибка: {error}", file=sys.stderr)
+        print(f"Error: {error}", file=sys.stderr)
         return 2
     except errors.FloodWaitError as error:
         print(
-            "Telegram потребовал паузу. Ничего не повторяйте минимум "
-            f"{error.seconds} секунд. Список не сформирован.",
+            "Telegram requested a delay. Do not retry for at least "
+            f"{error.seconds} seconds. The list was not generated.",
             file=sys.stderr,
         )
         return 3
     except errors.PeerFloodError:
         print(
-            "Telegram ограничил аккаунт (PeerFlood). Остановитесь и проверьте @SpamBot.",
+            "Telegram restricted the account (PeerFlood). Stop and check @SpamBot.",
             file=sys.stderr,
         )
         return 3
     except errors.RPCError as error:
-        print(f"Ошибка: {friendly_rpc_error(error)}", file=sys.stderr)
+        print(f"Error: {friendly_rpc_error(error)}", file=sys.stderr)
         return 2
     except OSError as error:
-        print(f"Системная или сетевая ошибка: {error}", file=sys.stderr)
+        print(f"System or network error: {error}", file=sys.stderr)
         return 2
     except KeyboardInterrupt:
-        print("Операция отменена.", file=sys.stderr)
+        print("Operation cancelled.", file=sys.stderr)
         return 130
 
 
