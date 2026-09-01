@@ -1,77 +1,81 @@
-# Удаление участников Telegram-группы по результатам опроса
+[English](README.md) | [Русский](README.ru.md)
 
-Небольшая локальная утилита на Python и Telethon, которая работает от имени
-вашего Telegram-аккаунта в два этапа:
+# Remove Telegram group members based on poll results
 
-1. `list_non_voters.py` находит текущих участников группы, которые не приняли
-   участие в указанном опросе, выводит их в терминал и сохраняет проверяемый
-   JSON-файл.
-2. `remove_members.py` читает этот JSON, ещё раз сверяет актуальный состав
-   группы и голоса, а затем в явном режиме `--execute` удаляет подходящих
-   участников.
+A small local Python and Telethon utility that works on behalf of your Telegram
+account in two stages:
 
-В выводе для каждого кандидата указываются `ID`, `first name`, `last name` и
-`username`. Для действий используется только числовой Telegram ID: имена и
-username могут отсутствовать или меняться.
+1. `list_non_voters.py` finds current group members who did not participate in
+   the specified poll, prints them to the terminal, and saves an auditable JSON
+   file.
+2. `remove_members.py` reads that JSON file, checks the current group membership
+   and votes again, and then removes eligible members only when explicitly run
+   with `--execute`.
+
+For each candidate, the output includes `ID`, `first name`, `last name`, and
+`username`. Only the numeric Telegram ID is used for actions because names and
+usernames can be missing or changed.
 
 > [!WARNING]
-> Гарантии, что Telegram не ограничит или не заблокирует аккаунт, нет.
-> Telegram не публикует "безопасное" число таких действий. Даже небольшие
-> партии и паузы лишь снижают риск, но не устраняют его. Сначала проверяйте
-> утилиту в отдельной тестовой группе и не запускайте массовую чистку с ценного
-> личного аккаунта.
+> There is no guarantee that Telegram will not restrict or ban your account.
+> Telegram does not publish a "safe" number of such actions. Small batches and
+> delays may reduce the risk, but they do not eliminate it. Test the utility in
+> a separate test group first, and do not run a mass cleanup from a valuable
+> personal account.
 
-## Требования и ограничения
+## Requirements and limitations
 
 - Python 3.12.
-- Аккаунт, от имени которого запускается утилита, должен состоять в группе и
-  иметь право удалять участников.
-- Этот же аккаунт должен сам проголосовать в опросе до его закрытия. Иначе
-  Telegram не отдаст список голосов (`POLL_VOTE_REQUIRED`); исправить это после
-  закрытия опроса уже нельзя. Это ограничение самого метода
+- The account running the utility must be a member of the group and have
+  permission to remove members.
+- That account must vote in the poll before it is closed. Otherwise, Telegram
+  will not return the voter list (`POLL_VOTE_REQUIRED`), and this cannot be
+  corrected after the poll has closed. This is a limitation of
   [`messages.getPollVotes`](https://core.telegram.org/method/messages.getPollVotes).
-- Поддерживается только **закрытый неанонимный опрос** в группе или
-  супергруппе. Для открытого или анонимного опроса нельзя достоверно определить
-  полный итоговый список не проголосовавших.
-- Broadcast-каналы не поддерживаются.
-- Утилита должна получить полный список участников и все страницы голосов.
-  При неполных данных она завершится без удаления.
-- Владелец группы, администраторы и текущий аккаунт исключаются. Также
-  исключаются участники, вступившие после публикации опроса, и участники, для
-  которых дату вступления невозможно подтвердить. Участники с уже действующими
-  ограничениями тоже защищены: скрипт не заменяет настройки другого
-  администратора.
-- Боты и удалённые аккаунты включаются в список кандидатов. Боты не могут
-  голосовать, поэтому при такой политике они ожидаемо попадут в список.
-- В обычной группе выполняется kick без постоянного бана. В супергруппе
-  применяется один временный бан на 10 минут, после которого Telegram сам
-  разрешит повторный вход. Второй запрос на немедленный unban намеренно не
-  отправляется: так сбой между ban и unban не оставит участника заблокированным
-  навсегда и скрипт не снимет ограничение, наложенное другим администратором.
-  Перед каждым запросом срок заново рассчитывается от серверного времени
-  Telegram, а не от часов компьютера. Suspend-aware проверка отменяет операцию
-  при неожиданном скачке времени или проблемной синхронизации после сна.
+- Only a **closed, non-anonymous poll** in a group or supergroup is supported.
+  For an open or anonymous poll, it is impossible to reliably determine the
+  complete final list of non-voters.
+- Broadcast channels are not supported.
+- The utility must retrieve the complete participant list and every page of
+  votes. It exits without removing anyone if the data is incomplete.
+- The group owner, administrators, and the current account are excluded.
+  Members who joined after the poll was published, and members whose join date
+  cannot be verified, are also excluded. Members with an existing restriction
+  are protected as well: the script does not replace restrictions set by
+  another administrator.
+- Bots and deleted accounts are included in the candidate list. Bots cannot
+  vote, so this policy will predictably include them.
+- In a basic group, the script performs a kick without a permanent ban. In a
+  supergroup, it applies a single 10-minute temporary ban, after which Telegram
+  allows the user to join again automatically. The script deliberately does
+  not send an immediate second unban request: this prevents a failure between
+  ban and unban from leaving a member blocked forever, and avoids removing a
+  restriction applied by another administrator. Before every request, the
+  deadline is recalculated from Telegram server time rather than the computer's
+  clock. A suspend-aware check cancels the operation if there is an unexpected
+  time jump or problematic clock synchronization after sleep.
 
-## Получение `api_id` и `api_hash`
+## Obtaining `api_id` and `api_hash`
 
-Telethon подключается к Telegram API как клиентское приложение. Для этого
-нужны идентификаторы приложения, а не токен бота:
+Telethon connects to the Telegram API as a client application. It requires
+application credentials, not a bot token:
 
-1. Перейдите на [my.telegram.org](https://my.telegram.org) и войдите по номеру
-   телефона вашего Telegram-аккаунта.
-2. Введите код подтверждения, присланный Telegram.
-3. Откройте **API development tools**.
-4. Создайте приложение, заполнив запрошенные название и короткое имя.
-5. Скопируйте выданные `api_id` и `api_hash` в локальный `.env`, как описано
-   ниже.
+1. Go to [my.telegram.org](https://my.telegram.org) and sign in with the phone
+   number of your Telegram account.
+2. Enter the confirmation code sent by Telegram.
+3. Open **API development tools**.
+4. Create an application and provide the requested application name and short
+   name.
+5. Copy the issued `api_id` and `api_hash` to your local `.env` file as
+   described below.
 
-Официальная инструкция Telegram:
+Official Telegram instructions:
 [Obtaining api_id](https://core.telegram.org/api/obtaining_api_id).
 
-`api_hash` нельзя публиковать. Код входа и пароль двухэтапной аутентификации
-также нельзя сохранять в проекте.
+Never publish your `api_hash`. Do not store login codes or your two-step
+verification password in the project either.
 
-## Установка
+## Installation
 
 ```bash
 cd /home/ihoru/tmp/telegram-poll-cleanup
@@ -81,21 +85,21 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-Для локального запуска Ruff и тех же проверок, что выполняются в GitHub
-Actions, установите также dev-зависимости:
+To run Ruff locally and use the same checks as GitHub Actions, also install the
+development dependencies:
 
 ```bash
 python -m pip install -r requirements-dev.txt
 ```
 
-Создайте локальный файл настроек:
+Create a local configuration file:
 
 ```bash
 cp .env.example .env
 chmod 600 .env
 ```
 
-Заполните `.env`:
+Fill in `.env`:
 
 ```dotenv
 TELEGRAM_API_ID=12345678
@@ -103,26 +107,26 @@ TELEGRAM_API_HASH=0123456789abcdef0123456789abcdef
 TELEGRAM_SESSION=telegram_poll_cleanup
 ```
 
-`TELEGRAM_SESSION` — имя локального session-файла, а не секретная строка
-авторизации. При указанном значении Telethon создаст рядом файл
-`telegram_poll_cleanup.session`.
+`TELEGRAM_SESSION` is the name of the local session file, not an authorization
+secret. With the value above, Telethon will create
+`telegram_poll_cleanup.session` in the project directory.
 
-### Первый вход
+### First login
 
-При первом запуске Telethon последовательно запросит:
+On the first run, Telethon will ask for the following in sequence:
 
-1. номер телефона аккаунта в международном формате;
-2. код, отправленный Telegram;
-3. пароль двухэтапной аутентификации, если она включена.
+1. the account phone number in international format;
+2. the code sent by Telegram;
+3. the two-step verification password, if enabled.
 
-После успешного входа авторизация сохраняется в `.session`, и при следующих
-запусках повторный код обычно не требуется. Не передавайте этот файл другим
-людям: он позволяет получить доступ к аккаунту. Перемещение или переименование
-session-файла может привести к запросу нового входа.
+After a successful login, authorization is stored in the `.session` file, so a
+new code is usually not required on subsequent runs. Do not share this file: it
+grants access to the account. Moving or renaming the session file may trigger a
+new login request.
 
-## 1. Получение списка не проголосовавших
+## 1. Generate the non-voter list
 
-Укажите ссылку на сообщение с опросом:
+Provide a link to the poll message:
 
 ```bash
 python list_non_voters.py \
@@ -130,10 +134,10 @@ python list_non_voters.py \
   --output non_voters.json
 ```
 
-Поддерживаются также ссылки на сообщения публичной группы, например
+Links to messages in public groups are also supported, for example
 `https://t.me/group_username/42`.
 
-Либо укажите группу и ID сообщения отдельно:
+Alternatively, provide the group and message ID separately:
 
 ```bash
 python list_non_voters.py \
@@ -142,7 +146,7 @@ python list_non_voters.py \
   --output non_voters.json
 ```
 
-Для приватной группы `--chat` может быть числовым Telegram ID вида
+For a private group, `--chat` may be a numeric Telegram ID such as
 `-1001234567890`:
 
 ```bash
@@ -152,55 +156,54 @@ python list_non_voters.py \
   --output non_voters.json
 ```
 
-Скрипт печатает таблицу кандидатов и сохраняет JSON со служебными данными о
-группе, опросе и аккаунте, который создал выгрузку. Эти поля позволяют второму
-скрипту отклонить список от другой группы, другого опроса или другого аккаунта.
+The script prints a candidate table and saves JSON metadata about the group,
+poll, and account that created the export. These fields allow the second script
+to reject a list created for a different group, poll, or account.
 
-Перед следующим шагом обязательно просмотрите `non_voters.json`. Отсутствующие
-`first_name`, `last_name` или `username` записываются как `null` и сами по себе
-не являются ошибкой.
+Review `non_voters.json` before proceeding. Missing `first_name`, `last_name`,
+or `username` values are stored as `null` and are not errors by themselves.
 
-### Файл исключений
+### Exclusions file
 
-Локальный файл `exclusions.txt` защищает участников, которых нельзя включать в
-список или удалять. Формат — один `@username` либо числовой Telegram user ID на
-строку; пустые строки и строки, начинающиеся с `#`, игнорируются:
+The local `exclusions.txt` file protects members who must not be listed or
+removed. Put one `@username` or numeric Telegram user ID on each line. Empty
+lines and lines beginning with `#` are ignored:
 
 ```text
 @example_username
 123456789
 ```
 
-Оба скрипта по умолчанию читают `exclusions.txt` из папки проекта. Второй
-скрипт применяет актуальный файл повторно непосредственно перед удалением,
-поэтому новые записи защищают пользователя даже после создания JSON-списка.
-При необходимости другой путь задаётся через `--exclusions`.
+Both scripts read `exclusions.txt` from the project directory by default. The
+second script applies the current file again immediately before removal, so a
+new entry protects a user even after the JSON list has been generated. Use
+`--exclusions` to provide a different path when needed.
 
-Числовой ID надёжнее username: username можно изменить или передать другому
-аккаунту. `exclusions.txt` содержит персональные данные и добавлен в
-`.gitignore`; на GitHub публикуется только безопасный шаблон
-`exclusions.example.txt`.
+A numeric ID is safer than a username because usernames can be changed or
+transferred to another account. `exclusions.txt` contains personal data and is
+listed in `.gitignore`; only the safe `exclusions.example.txt` template is
+published to GitHub.
 
-## 2. Проверка и удаление
+## 2. Review and remove
 
-Сначала выполните dry-run. Без `--execute` участники **не удаляются**:
+Run a dry run first. Without `--execute`, **no members are removed**:
 
 ```bash
 python remove_members.py --input non_voters.json
 ```
 
-Скрипт покажет группу и актуальный итоговый список после повторной проверки.
-Для реального удаления добавьте `--execute`:
+The script displays the group and the current final candidate list after
+rechecking it. Add `--execute` to perform the removal:
 
 ```bash
 python remove_members.py --input non_voters.json --execute
 ```
 
-Перед первым удалением потребуется вручную ввести подтверждение вида
-`REMOVE N`, где `N` — показанное количество кандидатов.
+Before the first removal, you must manually enter a confirmation in the form
+`REMOVE N`, where `N` is the displayed candidate count.
 
-По умолчанию один запуск удаляет не более 10 участников, последовательно, со
-случайной паузой от 15 до 30 секунд. Явный эквивалент настроек по умолчанию:
+By default, one run removes no more than 10 members, sequentially, with a random
+delay of 15 to 30 seconds. The explicit equivalent of the default settings is:
 
 ```bash
 python remove_members.py \
@@ -212,76 +215,79 @@ python remove_members.py \
   --log removal_results.jsonl
 ```
 
-Непосредственно перед действиями скрипт снова получает участников и голоса.
-Перед каждым отдельным удалением он ещё раз проверяет статус и свежую дату
-вступления, пропуская тех, кто вышел и вернулся, стал администратором или уже
-ограничен другим администратором. После каждого кандидата результат дописывается в
-`removal_results.jsonl`, поэтому уже выполненные действия не теряются при
-остановке.
+Immediately before taking action, the script retrieves the participants and
+votes again. Before each individual removal, it rechecks the member's status
+and latest join date, skipping anyone who left and rejoined, became an
+administrator, or was already restricted by another administrator. The result
+for each candidate is appended to `removal_results.jsonl`, so completed actions
+are not lost if the process stops.
 
-Для супергруппы перед запросом записывается `kick_started`. Если соединение или
-процесс оборвётся в неопределённый момент, новые удаления будут заблокированы
-до окончания 10-минутного временного бана с минутным защитным запасом. Скрипт
-не пытается автоматически снимать бан. После указанного в журнале
-`safe_retry_after` повторите dry-run: Telegram уже должен был снять именно это
-временное ограничение сам.
+For a supergroup, `kick_started` is written before the request. If the
+connection or process stops at an uncertain moment, further removals are
+blocked until the 10-minute temporary ban expires, plus a one-minute safety
+margin. The script does not attempt to remove the ban automatically. After the
+`safe_retry_after` time recorded in the log, repeat the dry run: Telegram should
+already have removed this specific temporary restriction automatically.
 
-При `FloodWaitError` или `PeerFloodError` выполнение прекращается сразу. Не
-перезапускайте утилиту для обхода ограничения, не переключайтесь на другой
-аккаунт и соблюдайте указанное Telegram время ожидания.
+If a `FloodWaitError` or `PeerFloodError` occurs, execution stops immediately.
+Do not restart the utility to bypass the restriction, do not switch to another
+account, and observe the waiting period specified by Telegram.
 
-## Безопасность данных
+## Data security
 
-Файлы `.env`, `*.session`, список кандидатов и журнал содержат секреты или
-персональные данные. Они добавлены в `.gitignore`, но это не защищает файл с
-нестандартным именем и не отменяет осторожность.
+The `.env`, `*.session`, candidate list, and log files contain secrets or
+personal data. They are listed in `.gitignore`, but this does not protect a file
+with a custom name and does not replace careful handling.
 
-Рекомендуемые права доступа:
+Recommended file permissions:
 
 ```bash
 chmod 600 .env *.session non_voters.json removal_results.jsonl
 ```
 
-- Никогда не добавляйте эти файлы в Git, облачную папку или сообщение в чате.
-- Не публикуйте скриншоты с `api_hash`, кодами входа и персональными данными.
-- Храните выгрузку только столько, сколько нужно для проверки и запуска.
-- Если session-файл мог попасть к постороннему, завершите подозрительные
-  сеансы в **Telegram → Настройки → Устройства** и создайте новую локальную
-  сессию.
+- Never add these files to Git, a cloud-synced folder, or a chat message.
+- Do not publish screenshots containing `api_hash`, login codes, or personal
+  data.
+- Keep the export only as long as needed for review and execution.
+- If the session file may have been exposed, close suspicious sessions under
+  **Telegram -> Settings -> Devices** and create a new local session.
 
-## Почему риск блокировки остаётся
+## Why the account restriction risk remains
 
-Скрипт использует официальный Telegram API через сторонний клиент Telethon, но
-это не даёт иммунитета от антиспам-ограничений. Telegram отслеживает
-злоупотребления API и может временно ограничить действия или заблокировать
-аккаунт. Риск зависит от истории аккаунта, размера и частоты партий и других
-непубличных факторов. В [официальной инструкции по API ID](https://core.telegram.org/api/obtaining_api_id)
-Telegram прямо предупреждает, что сторонние API-клиенты контролируются для
-предотвращения злоупотреблений.
+The script uses the official Telegram API through the third-party Telethon
+client, but this does not provide immunity from anti-spam restrictions.
+Telegram monitors API abuse and may temporarily restrict actions or ban an
+account. The risk depends on the account history, batch size, frequency, and
+other undisclosed factors. In the
+[official API ID instructions](https://core.telegram.org/api/obtaining_api_id),
+Telegram explicitly warns that third-party API clients are monitored to prevent
+abuse.
 
-Предохранители проекта — dry-run, повторная проверка, лимит 10, паузы 15–30
-секунд, журнал прогресса и немедленная остановка при серверном ограничении —
-уменьшают вероятность ошибки и агрессивного поведения. Они не являются
-гарантией безопасности аккаунта.
+The project's safeguards - dry runs, rechecks, a limit of 10, delays of 15 to
+30 seconds, a progress log, and immediate termination on a server restriction -
+reduce the chance of mistakes and aggressive behavior. They do not guarantee
+account safety.
 
-## Публикация на GitHub
+## Publishing on GitHub
 
-Репозиторий настроен с веткой `main` и workflow
-`.github/workflows/ci.yml`. На каждый push и pull request GitHub Actions
-установит зависимости, запустит Ruff, unit-тесты и проверит компиляцию.
+The repository uses the `main` branch and includes the
+`.github/workflows/ci.yml` workflow. On every push and pull request, GitHub
+Actions installs dependencies, runs Ruff and unit tests, and verifies Python
+compilation.
 
-1. Создайте на GitHub пустой репозиторий без автоматически добавленных
-   `README`, `.gitignore` и лицензии.
-2. Подключите его и отправьте ветку:
+1. Create an empty GitHub repository without automatically adding a `README`,
+   `.gitignore`, or license.
+2. Add it as a remote and push the branch:
 
 ```bash
 git remote add origin git@github.com:OWNER/telegram-poll-cleanup.git
 git push -u origin main
 ```
 
-Вместо SSH можно использовать HTTPS-адрес репозитория. `.env`, session-файлы,
-выгрузки участников, журналы, локальные исключения и виртуальное окружение
-исключены через `.gitignore` и не должны попадать на GitHub.
+You can use the HTTPS repository URL instead of SSH. `.env`, session files,
+participant exports, logs, local exclusions, and the virtual environment are
+excluded through `.gitignore` and must not be uploaded to GitHub.
 
-Лицензия намеренно не добавлена: для публичного open-source репозитория сначала
-выберите подходящую лицензию. Для приватного репозитория это не требуется.
+No license is included intentionally. Choose an appropriate license before
+publishing this as a public open-source repository. A private repository does
+not require one.
