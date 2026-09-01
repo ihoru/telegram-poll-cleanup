@@ -189,14 +189,15 @@ published to GitHub.
 Run a dry run first. Without `--execute`, **no members are removed**:
 
 ```bash
-python remove_members.py --input non_voters.json
+python remove_members.py
 ```
 
 The script displays the group and the current final candidate list after
-rechecking it. Add `--execute` to perform the removal:
+rechecking it. By default, it reads `non_voters.json`; use `--input` to select a
+different file. Add `--execute` to perform the removal:
 
 ```bash
-python remove_members.py --input non_voters.json --execute
+python remove_members.py --execute
 ```
 
 Before the first removal, you must manually enter a confirmation in the form
@@ -207,7 +208,6 @@ delay of 15 to 30 seconds. The explicit equivalent of the default settings is:
 
 ```bash
 python remove_members.py \
-  --input non_voters.json \
   --execute \
   --batch-size 10 \
   --min-delay 15 \

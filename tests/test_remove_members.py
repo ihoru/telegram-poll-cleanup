@@ -14,6 +14,7 @@ from telethon.tl.custom import ParticipantPermissions
 
 from remove_members import (
     ServerClock,
+    build_parser,
     ensure_fresh_finite_ban_window,
     ensure_removal_permission,
     fetch_server_clock,
@@ -90,6 +91,13 @@ class RemovalPermissionTests(unittest.TestCase):
 
 
 class ArgumentValidationTests(unittest.TestCase):
+    def test_input_defaults_to_non_voters_json_and_can_be_overridden(self) -> None:
+        self.assertEqual(build_parser().parse_args([]).input, Path("non_voters.json"))
+        self.assertEqual(
+            build_parser().parse_args(["--input", "custom.json"]).input,
+            Path("custom.json"),
+        )
+
     def test_non_negative_float_accepts_only_finite_non_negative_values(self) -> None:
         self.assertEqual(non_negative_float("0"), 0.0)
         self.assertEqual(non_negative_float("1.5"), 1.5)

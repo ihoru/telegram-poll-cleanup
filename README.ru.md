@@ -188,14 +188,15 @@ python list_non_voters.py \
 Сначала выполните dry-run. Без `--execute` участники **не удаляются**:
 
 ```bash
-python remove_members.py --input non_voters.json
+python remove_members.py
 ```
 
 Скрипт покажет группу и актуальный итоговый список после повторной проверки.
-Для реального удаления добавьте `--execute`:
+По умолчанию он читает `non_voters.json`; другой файл можно указать через
+`--input`. Для реального удаления добавьте `--execute`:
 
 ```bash
-python remove_members.py --input non_voters.json --execute
+python remove_members.py --execute
 ```
 
 Перед первым удалением потребуется вручную ввести подтверждение вида
@@ -206,7 +207,6 @@ python remove_members.py --input non_voters.json --execute
 
 ```bash
 python remove_members.py \
-  --input non_voters.json \
   --execute \
   --batch-size 10 \
   --min-delay 15 \

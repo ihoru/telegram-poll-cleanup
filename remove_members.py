@@ -142,7 +142,10 @@ def build_parser() -> argparse.ArgumentParser:
         )
     )
     parser.add_argument(
-        "--input", type=Path, required=True, help="JSON produced by list_non_voters.py"
+        "--input",
+        type=Path,
+        default=Path("non_voters.json"),
+        help="JSON produced by list_non_voters.py (default: non_voters.json)",
     )
     parser.add_argument(
         "--exclusions",
