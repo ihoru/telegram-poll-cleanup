@@ -159,10 +159,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Perform removals after interactive confirmation",
     )
     parser.add_argument(
+        "--limit",
         "--batch-size",
+        dest="batch_size",
+        metavar="N",
         type=positive_int,
         default=10,
-        help="Maximum removals per run (default: 10)",
+        help="Maximum removals per run; --batch-size is an alias (default: 10)",
     )
     parser.add_argument(
         "--min-delay",
@@ -357,7 +360,7 @@ async def pause_before_next(
 
 async def run(args: argparse.Namespace) -> int:
     if args.batch_size > 1_000:
-        raise CleanupError("--batch-size cannot exceed 1000.")
+        raise CleanupError("--limit cannot exceed 1000.")
     if args.max_delay < args.min_delay:
         raise CleanupError("--max-delay cannot be less than --min-delay.")
 

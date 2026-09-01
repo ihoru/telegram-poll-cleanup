@@ -98,6 +98,14 @@ class ArgumentValidationTests(unittest.TestCase):
             Path("custom.json"),
         )
 
+    def test_limit_caps_the_batch_and_batch_size_remains_an_alias(self) -> None:
+        self.assertEqual(build_parser().parse_args([]).batch_size, 10)
+        self.assertEqual(build_parser().parse_args(["--limit", "1"]).batch_size, 1)
+        self.assertEqual(
+            build_parser().parse_args(["--batch-size", "2"]).batch_size,
+            2,
+        )
+
     def test_non_negative_float_accepts_only_finite_non_negative_values(self) -> None:
         self.assertEqual(non_negative_float("0"), 0.0)
         self.assertEqual(non_negative_float("1.5"), 1.5)

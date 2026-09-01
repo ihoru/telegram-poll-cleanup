@@ -204,16 +204,24 @@ Before the first removal, you must manually enter a confirmation in the form
 `REMOVE N`, where `N` is the displayed candidate count.
 
 By default, one run removes no more than 10 members, sequentially, with a random
-delay of 15 to 30 seconds. The explicit equivalent of the default settings is:
+delay of 15 to 30 seconds. Use `--limit 1` for a cautious first live test:
+
+```bash
+python remove_members.py --limit 1 --execute
+```
+
+The explicit equivalent of the default settings is:
 
 ```bash
 python remove_members.py \
   --execute \
-  --batch-size 10 \
+  --limit 10 \
   --min-delay 15 \
   --max-delay 30 \
   --log removal_results.jsonl
 ```
+
+`--batch-size` remains available as an alias for `--limit`.
 
 Immediately before taking action, the script retrieves the participants and
 votes again. Before each individual removal, it rechecks the member's status
