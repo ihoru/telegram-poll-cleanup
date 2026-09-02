@@ -1,3 +1,8 @@
+> [!WARNING]
+> This project has moved to
+> [ihoru/telegram-automations](https://github.com/ihoru/telegram-automations).
+> This repository is archived and no longer maintained here.
+
 [English](README.md) | [Русский](README.ru.md)
 
 # Remove Telegram group members based on poll results
